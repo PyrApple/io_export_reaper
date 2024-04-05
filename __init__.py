@@ -1,0 +1,202 @@
+bl_info = {
+    "name": "Export animation to Reaper automation",
+    "author": "David Poirier-Q.",
+    "version": (0, 1, 0),
+    "blender": (4, 0, 0),
+    "location": "View3D > Sidebar > View Tab > Reaper Export",
+    "description": "Export object animation (location and rotation) to reaper automation file",
+    "doc_url": "",
+    "category": "Animation",
+    "support": "COMMUNITY",
+}
+
+import bpy
+import mathutils
+import math
+import os
+from bpy.props import (
+    StringProperty,
+    IntProperty,
+    PointerProperty,
+)
+from bpy.types import (
+    Operator,
+    Panel,
+    PropertyGroup,
+)
+
+# ------------------------------------------------------
+# Action class
+# ------------------------------------------------------
+class REAPERIO_OT_RunAction(Operator):
+    bl_idname = "reaper_io.export"
+    bl_label = "export animation"
+    bl_description = "Export animation to automation files on disk"
+    bl_options = {'REGISTER'}
+
+    def execute(self, context):
+
+        # init locals
+        scene = context.scene
+        reaper_io = scene.reaper_io
+        animated_object = scene.objects[reaper_io.animated_object]
+        boundary_object = scene.objects[reaper_io.boundary_object]
+
+        # open output files
+        output_folder_path = bpy.path.abspath(reaper_io.output_folder_path)
+        file_path_x = os.path.join(output_folder_path, reaper_io.project_name + '_x.ReaperAutoItem')
+        file_path_y = os.path.join(output_folder_path, reaper_io.project_name + '_y.ReaperAutoItem')
+        file_x = open(file_path_x, 'w')
+        file_y = open(file_path_y, 'w')
+        files = [file_x, file_y]
+
+        # init locals
+        round_factor = 2 # round factor applied on values
+
+        daw_fps = reaper_io.daw_bpm / 60 # increase bpm to increase availabe sampling res. in blender
+
+        # header (reaper)
+        daw_tot_steps = int( daw_fps * (scene.frame_end - scene.frame_start + 1) / scene.render.fps )
+        for file in files:
+            file.write("SRCLEN " + str(daw_tot_steps) + "\n")
+            file.write("LFO 0 0 0 0 0 0 0\n")
+
+        # loop over frames
+        frame_step = round(scene.render.fps / daw_fps)
+        for iFrame in range(scene.frame_start, scene.frame_end + frame_step, frame_step):
+
+            # snap to last frame if counter went past it
+            if( iFrame > scene.frame_end ):
+                iFrame = scene.frame_end
+
+            # set new current frame
+            scene.frame_set(iFrame)
+
+            # get orientation
+            # rot = object.rotation_euler
+
+            # get time stamp
+            daw_grid_step_id = int( daw_fps * (iFrame / scene.render.fps) )
+
+            # loop over coords
+            for iCoord in range(len(files)):
+
+                # convert coord to 0-1 values (vst)
+                v = (animated_object.location[iCoord] - boundary_object.location[iCoord]) / boundary_object.dimensions[iCoord]
+                v = round(v, round_factor)
+                files[iCoord].write("PPT " + str(daw_grid_step_id) + " " + str(v) + " 0\n")
+
+        # write to file
+        for file in files:
+            file.close()
+
+        # log
+        print("files saved to:", output_folder_path)
+        self.report({'INFO'}, 'files saved to: ' + output_folder_path)
+
+        return {'FINISHED'}
+
+
+# ------------------------------------------------------
+# Define Properties
+# ------------------------------------------------------
+class REAPERIO_Props(PropertyGroup):
+
+    animated_object: StringProperty(
+        name="Object",
+        description="Object which animation will be exported",
+        default="", maxlen=1024,
+    )
+
+    daw_bpm: IntProperty(
+        name="DAW BPM",
+        min=1, max=1024, default=120,
+        description="DAW BPM"
+    )
+
+    output_folder_path: StringProperty(
+        name="Folder",
+        description="Path to the folder where files will be exported",
+        default="//", maxlen=1024, subtype="FILE_PATH",
+    )
+
+    boundary_object: StringProperty(
+        name="Boundary",
+        description="Rectangle object that defines the origin and borders of the export zone, for VST 0-1 scaling",
+        default="", maxlen=1024,
+    )
+
+    project_name: StringProperty(
+        name="Project",
+        description="Prefix name used for files export",
+        default="myproject", maxlen=1024,
+    )
+
+
+# ------------------------------------------------------
+# UI Class
+# ------------------------------------------------------
+class REAPERIO_PT_ui(Panel):
+    bl_idname = "REAPERIO_PT_main"
+    bl_label = "Reaper Export"
+    bl_space_type = "VIEW_3D"
+    bl_region_type = "UI"
+    bl_category = "Reaper"
+    bl_context = "objectmode"
+    bl_options = {'DEFAULT_CLOSED'}
+
+    def draw(self, context):
+
+        # init locals
+        layout = self.layout
+        scene = context.scene
+        reaper_io = scene.reaper_io
+
+        # define ui
+        row = layout.row(align=True)
+        row.prop_search(reaper_io, "animated_object", bpy.data, "objects")
+
+        row = layout.row(align=True)
+        row.prop(reaper_io, "daw_bpm")
+
+        row = layout.row(align=True)
+        row.prop(reaper_io, "output_folder_path")
+
+        row = layout.row(align=True)
+        row.prop_search(reaper_io, "boundary_object", bpy.data, "objects")
+
+        row = layout.row(align=True)
+        row.prop(reaper_io, "project_name")
+
+        row = layout.row(align=True)
+        row.operator("reaper_io.export", text="Export Animation To Disk", icon="EXPORT")
+
+
+# ------------------------------------------------------
+# Registration
+# ------------------------------------------------------
+classes = (
+    REAPERIO_OT_RunAction,
+    REAPERIO_PT_ui,
+    REAPERIO_Props
+)
+
+
+def register():
+    from bpy.utils import register_class
+    for cls in classes:
+        register_class(cls)
+
+    bpy.types.Scene.reaper_io = PointerProperty(type=REAPERIO_Props)
+
+
+def unregister():
+    from bpy.utils import unregister_class
+    for cls in reversed(classes):
+        unregister_class(cls)
+
+    del bpy.types.Scene.reaper_io
+
+
+if __name__ == "__main__":
+    register()
