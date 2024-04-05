@@ -41,19 +41,20 @@ class REAPERIO_OT_RunAction(Operator):
         reaper_io = scene.reaper_io
         animated_object = scene.objects[reaper_io.animated_object]
         boundary_object = scene.objects[reaper_io.boundary_object]
+        round_factor = 2 # round factor applied on values
+        daw_fps = reaper_io.daw_bpm / 60 # increase bpm to increase availabe sampling res. in blender
+        scene_frame_current = scene.frame_current
 
         # open output files
         output_folder_path = bpy.path.abspath(reaper_io.output_folder_path)
-        file_path_x = os.path.join(output_folder_path, reaper_io.project_name + '_x.ReaperAutoItem')
-        file_path_y = os.path.join(output_folder_path, reaper_io.project_name + '_y.ReaperAutoItem')
-        file_x = open(file_path_x, 'w')
-        file_y = open(file_path_y, 'w')
-        files = [file_x, file_y]
-
-        # init locals
-        round_factor = 2 # round factor applied on values
-
-        daw_fps = reaper_io.daw_bpm / 60 # increase bpm to increase availabe sampling res. in blender
+        file_path_loc_x = os.path.join(output_folder_path, reaper_io.project_name + '_loc_x.ReaperAutoItem')
+        file_path_loc_y = os.path.join(output_folder_path, reaper_io.project_name + '_loc_y.ReaperAutoItem')
+        file_path_rot_z = os.path.join(output_folder_path, reaper_io.project_name + '_rot_z.ReaperAutoItem')
+        file_loc_x = open(file_path_loc_x, 'w')
+        file_loc_y = open(file_path_loc_y, 'w')
+        file_rot_z = open(file_path_rot_z, 'w')
+        files = [file_loc_x, file_loc_y, file_rot_z]
+        file_coord_ids = [0, 1, 2]
 
         # header (reaper)
         daw_tot_steps = int( daw_fps * (scene.frame_end - scene.frame_start + 1) / scene.render.fps )
@@ -78,11 +79,26 @@ class REAPERIO_OT_RunAction(Operator):
             # get time stamp
             daw_grid_step_id = int( daw_fps * (iFrame / scene.render.fps) )
 
-            # loop over coords
-            for iCoord in range(len(files)):
+            # loop over loc coords
+            for iCoord in range(0, 2):
+
+                # init locals
+                id = file_coord_ids[iCoord]
 
                 # convert coord to 0-1 values (vst)
-                v = (animated_object.location[iCoord] - boundary_object.location[iCoord]) / boundary_object.dimensions[iCoord]
+                v = (animated_object.location[id] - boundary_object.location[id]) / boundary_object.dimensions[id]
+                v = round(v, round_factor)
+                files[iCoord].write("PPT " + str(daw_grid_step_id) + " " + str(v) + " 0\n")
+
+            # loop over rot coords
+            rotation_euler = animated_object.matrix_world.to_euler()
+            for iCoord in range(2, 3):
+
+                # init locals
+                id = file_coord_ids[iCoord]
+
+                # convert coord to 0-1 values (vst)
+                v = 0.5 + ( rotation_euler[id] / (2*math.pi) )
                 v = round(v, round_factor)
                 files[iCoord].write("PPT " + str(daw_grid_step_id) + " " + str(v) + " 0\n")
 
@@ -93,6 +109,9 @@ class REAPERIO_OT_RunAction(Operator):
         # log
         print("files saved to:", output_folder_path)
         self.report({'INFO'}, 'files saved to: ' + output_folder_path)
+
+        # reset current frame
+        scene.frame_set(scene_frame_current)
 
         return {'FINISHED'}
 
