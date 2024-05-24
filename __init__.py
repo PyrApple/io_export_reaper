@@ -49,12 +49,14 @@ class REAPERIO_OT_RunAction(Operator):
         output_folder_path = bpy.path.abspath(reaper_io.output_folder_path)
         file_path_loc_x = os.path.join(output_folder_path, reaper_io.project_name + '_loc_x.ReaperAutoItem')
         file_path_loc_y = os.path.join(output_folder_path, reaper_io.project_name + '_loc_y.ReaperAutoItem')
+        file_path_loc_z = os.path.join(output_folder_path, reaper_io.project_name + '_loc_z.ReaperAutoItem')
         file_path_rot_z = os.path.join(output_folder_path, reaper_io.project_name + '_rot_z.ReaperAutoItem')
         file_loc_x = open(file_path_loc_x, 'w')
         file_loc_y = open(file_path_loc_y, 'w')
+        file_loc_z = open(file_path_loc_z, 'w')
         file_rot_z = open(file_path_rot_z, 'w')
-        files = [file_loc_x, file_loc_y, file_rot_z]
-        file_coord_ids = [0, 1, 2]
+        files = [file_loc_x, file_loc_y, file_loc_z, file_rot_z]
+        file_coord_ids = [0, 1, 2, 2]
 
         # header (reaper)
         daw_tot_steps = int( daw_fps * (scene.frame_end - scene.frame_start + 1) / scene.render.fps )
@@ -77,28 +79,37 @@ class REAPERIO_OT_RunAction(Operator):
             # rot = object.rotation_euler
 
             # get time stamp
-            daw_grid_step_id = int( daw_fps * (iFrame / scene.render.fps) )
+            current_frame_relative = iFrame - scene.frame_start + 1 # so that we start at PPT 0 even if blender initial frame is not 1
+            daw_grid_step_id = int( daw_fps * (current_frame_relative / scene.render.fps) )
 
             # loop over loc coords
-            for iCoord in range(0, 2):
+            for iCoord in range(0, 3):
 
                 # init locals
                 id = file_coord_ids[iCoord]
 
                 # convert coord to 0-1 values (vst)
-                v = (animated_object.location[id] - boundary_object.location[id]) / boundary_object.dimensions[id]
+                # v = (animated_object.location[id] - boundary_object.location[id]) / boundary_object.dimensions[id]
+                v = (animated_object.matrix_world.translation[id] - boundary_object.matrix_world.translation[id]) / boundary_object.dimensions[id]
+
+                # v *= -1 # debug: arbitrary inversion
+
                 v = round(v, round_factor)
                 files[iCoord].write("PPT " + str(daw_grid_step_id) + " " + str(v) + " 0\n")
 
             # loop over rot coords
             rotation_euler = animated_object.matrix_world.to_euler()
-            for iCoord in range(2, 3):
+            for iCoord in range(3, 4):
 
                 # init locals
                 id = file_coord_ids[iCoord]
 
                 # convert coord to 0-1 values (vst)
-                v = 0.5 + ( rotation_euler[id] / (2*math.pi) )
+                v = rotation_euler[id]
+                # v *= -1 # debug: invert
+                # v += math.pi/2 # debug: arbitrary offset
+                v = ( (v + math.pi) % (2*math.pi) ) - math.pi # wrap in -pi pi
+                v = 0.5 + ( v / (2*math.pi) ) # wrap in 0-1
                 v = round(v, round_factor)
                 files[iCoord].write("PPT " + str(daw_grid_step_id) + " " + str(v) + " 0\n")
 
