@@ -109,11 +109,9 @@ class REAPERIO_OT_RunAction(Operator):
                 id = file_coord_ids[iCoord]
 
                 # convert coord to 0-1 values (vst)
-                v = rotation_euler[id]
-                # v *= -1 # debug: invert
-                # v += math.pi/2 # debug: arbitrary offset
-                v = ( (v + math.pi) % (2*math.pi) ) - math.pi # wrap in -pi pi
-                v = 0.5 + ( v / (2*math.pi) ) # wrap in 0-1
+                v = rotation_euler[id] # in -pi:pi
+                # v = ( (v + math.pi) % (2*math.pi) ) - math.pi # wrap in -pi pi
+                v = ( v + math.pi ) / (2 * math.pi) # wrap in 0:1
                 v = round(v, round_factor)
                 files[iCoord].write("PPT " + str(daw_grid_step_id) + " " + str(v) + " 0\n")
 
