@@ -14,6 +14,7 @@ import bpy
 import mathutils
 import math
 import os
+import pathlib
 from bpy.props import (
     StringProperty,
     IntProperty,
@@ -41,7 +42,7 @@ class REAPERIO_OT_RunAction(Operator):
         reaper_io = scene.reaper_io
         animated_object = scene.objects[reaper_io.animated_object]
         boundary_object = scene.objects[reaper_io.boundary_object]
-        round_factor = 2 # round factor applied on values
+        round_factor = 4 # round factor applied on values
         daw_fps = reaper_io.daw_bpm / 60 # increase bpm to increase availabe sampling res. in blender
         scene_frame_current = scene.frame_current
 
@@ -91,6 +92,9 @@ class REAPERIO_OT_RunAction(Operator):
                 # convert coord to 0-1 values (vst)
                 # v = (animated_object.location[id] - boundary_object.location[id]) / boundary_object.dimensions[id]
                 v = (animated_object.matrix_world.translation[id] - boundary_object.matrix_world.translation[id]) / boundary_object.dimensions[id]
+
+                # v = animated_object.matrix_world.translation * boundary_object.matrix_world.inverted()
+                # v = v[id]
 
                 # v *= -1 # debug: arbitrary inversion
 
@@ -144,10 +148,12 @@ class REAPERIO_Props(PropertyGroup):
         description="DAW BPM"
     )
 
+    default_output_path = os.path.join(pathlib.Path.home(), "Library/Application Support/REAPER/AutomationItems")
+
     output_folder_path: StringProperty(
         name="Folder",
         description="Path to the folder where files will be exported",
-        default="//", maxlen=1024, subtype="FILE_PATH",
+        default=default_output_path, maxlen=1024, subtype="FILE_PATH",
     )
 
     boundary_object: StringProperty(
@@ -173,7 +179,7 @@ class REAPERIO_PT_ui(Panel):
     bl_region_type = "UI"
     bl_category = "Reaper"
     bl_context = "objectmode"
-    bl_options = {'DEFAULT_CLOSED'}
+    # bl_options = {'DEFAULT_CLOSED'}
 
     def draw(self, context):
 
