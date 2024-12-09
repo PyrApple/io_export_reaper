@@ -113,6 +113,18 @@ class REAPERIO_OT_RunAction(Operator):
                 # v = ( (v + math.pi) % (2*math.pi) ) - math.pi # wrap in -pi pi
                 v = ( v + math.pi ) / (2 * math.pi) # wrap in 0:1
                 v = round(v, round_factor)
+
+                # prevent 0-180 etc. jumps for orientation coordinates
+                if( iFrame > scene.frame_start ):
+
+                    # insert current value at daw_grid_step_id-1 time to avoid slow transition between gimbal lock transitions
+                    if( abs( rotation_euler[id] - rotation_euler_old[id] ) > 10*(2*math.pi/180)):
+                        files[iCoord].write("PPT " + str(daw_grid_step_id_old) + " " + str(v) + " 0\n")
+
+                # update locals
+                rotation_euler_old = rotation_euler
+                daw_grid_step_id_old = daw_grid_step_id
+
                 files[iCoord].write("PPT " + str(daw_grid_step_id) + " " + str(v) + " 0\n")
 
         # write to file
